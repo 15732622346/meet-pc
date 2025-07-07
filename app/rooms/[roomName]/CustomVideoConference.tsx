@@ -213,8 +213,11 @@ export function CustomVideoConference({
   React.useEffect(() => {
     if (!participants.length) return;
 
+    // 创建一个Map保存每个参与者的处理函数
+    const handlersMap = new Map();
+
     const handleAttributesChanged = (participant: Participant) => {
-      console.log(`🔄 参与者属性变化: ${participant.name}`);
+      console.log(`🔄 参与者属性变化 - ${participant.name}:`, participant.attributes);
       
       // 检查是否有聊天禁言状态更新
       if (participant.attributes?.chatGlobalMute !== undefined) {
@@ -229,13 +232,21 @@ export function CustomVideoConference({
 
     // 为所有参与者添加事件监听
     participants.forEach(participant => {
-      participant.on('attributesChanged', () => handleAttributesChanged(participant));
+      // 创建特定于该参与者的处理函数
+      const handler = () => handleAttributesChanged(participant);
+      // 保存到Map中以便清理
+      handlersMap.set(participant.sid, handler);
+      // 添加监听器
+      participant.on('attributesChanged', handler);
     });
 
     // 清理函数
     return () => {
       participants.forEach(participant => {
-        participant.off('attributesChanged', () => handleAttributesChanged(participant));
+        const handler = handlersMap.get(participant.sid);
+        if (handler) {
+          participant.off('attributesChanged', handler);
+        }
       });
     };
   }, [participants]);
@@ -1595,28 +1606,71 @@ export function CustomVideoConference({
     }
   }, [localParticipant]);
 
-  // 监听属性变化，特别是isDisabledUser属性
+  // 修复localParticipant的属性监听
   React.useEffect(() => {
     if (!localParticipant) return;
     
     const handleAttributesChanged = () => {
-      console.log('🔄 属性变化检测 - attributes changed:', localParticipant.attributes);
+      const oldDisabledState = isUserDisabled;
+      const newDisabledState = localParticipant.attributes?.isDisabledUser === 'true';
+      const timestamp = new Date().toLocaleTimeString();
+      
+      // 增强调试日志
+      console.log('🔄 本地参与者属性变化检测:', localParticipant.attributes);
+      console.log('当前禁用状态:', oldDisabledState);
+      console.log('属性中的禁用标记:', localParticipant.attributes?.isDisabledUser);
+      
+      // 添加到调试面板
+      setDebugInfo(prev => prev + 
+        `\n[${timestamp}] 🔍 属性变化检测:\n` +
+        `- 完整attributes: ${JSON.stringify(localParticipant.attributes)}\n` +
+        `- isDisabledUser变化: ${oldDisabledState ? 'true' : 'false'} → ${newDisabledState ? 'true' : 'false'}\n` +
+        `---------------------------\n`
+      );
+      
+      // 特别检测isDisabledUser变化
+      if (localParticipant.attributes?.isDisabledUser !== undefined) {
+        const isNowDisabled = localParticipant.attributes.isDisabledUser === 'true';
+        setDebugInfo(prev => prev + 
+          `\n[${timestamp}] 🚨 禁用状态特别检测:\n` +
+          `- 之前状态: ${oldDisabledState ? '已禁用' : '未禁用'}\n` +
+          `- 当前状态: ${isNowDisabled ? '已禁用' : '未禁用'}\n` +
+          `- 原始值: "${localParticipant.attributes.isDisabledUser}"\n` +
+          `---------------------------\n`
+        );
+      }
+      
       // 检查禁用状态并更新
       if (localParticipant.attributes?.isDisabledUser === 'true') {
         console.log('🚫 用户被禁用状态变化: true');
         setIsUserDisabled(true);
+        
+        // 添加到调试面板
+        setDebugInfo(prev => prev + `\n[${timestamp}] 🚫 用户被禁用!\n`);
       } else {
         console.log('✅ 用户禁用状态变化: false');
         setIsUserDisabled(false);
+        
+        // 添加到调试面板
+        setDebugInfo(prev => prev + `\n[${timestamp}] ✅ 用户禁用状态解除\n`);
       }
     };
+    
+    // 初始检测
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugInfo(prev => prev + 
+      `\n[${timestamp}] 📌 初始禁用状态检测:\n` +
+      `- isDisabledUser: ${localParticipant.attributes?.isDisabledUser || '未设置'}\n` +
+      `- 当前状态变量: ${isUserDisabled ? 'true' : 'false'}\n` +
+      `---------------------------\n`
+    );
     
     localParticipant.on('attributesChanged', handleAttributesChanged);
     
     return () => {
       localParticipant.off('attributesChanged', handleAttributesChanged);
     };
-  }, [localParticipant]);
+  }, [localParticipant, isUserDisabled, setDebugInfo]);
 
   return (
     <LayoutContextProvider value={layoutContext}>
