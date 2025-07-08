@@ -8,12 +8,18 @@ interface SimpleMicManagementProps {
   userRole?: number;
   userName?: string;
   maxMicSlots?: number; // 保留作为备选值
+  roomDetails?: { // 新增：接收从API获取的房间详情
+    maxMicSlots: number;
+    roomName: string;
+    roomState: number;
+  } | null;
 }
 
 export function SimpleMicManagement({ 
   userRole = 1, 
   userName, 
-  maxMicSlots: defaultMaxMicSlots = 6 
+  maxMicSlots: defaultMaxMicSlots = 6,
+  roomDetails // 新增：接收roomDetails参数 
 }: SimpleMicManagementProps) {
   const room = useRoomContext();
   const roomInfo = useRoomInfo();
@@ -23,25 +29,35 @@ export function SimpleMicManagement({
   
   // 从LiveKit服务器房间元数据获取maxMicSlots
   const maxMicSlots = React.useMemo(() => {
-    let maxSlots;
+    // 设置默认值，避免undefined
+    let maxSlots = 8; // 默认值
     
     try {
-      // 优先从房间元数据获取
-      if (roomInfo?.metadata) {
+      // 1. 优先从API获取的roomDetails中读取
+      if (roomDetails?.maxMicSlots) {
+        maxSlots = roomDetails.maxMicSlots;
+        console.log('🎯 从API获取的房间详情获取麦位数量:', maxSlots);
+      }
+      // 2. 其次从房间元数据获取
+      else if (roomInfo?.metadata) {
         const metadata = JSON.parse(roomInfo.metadata);
         if (metadata && typeof metadata.maxMicSlots === 'number') {
           maxSlots = metadata.maxMicSlots;
           console.log('🎯 从LiveKit房间元数据获取麦位数量:', maxSlots);
-          return maxSlots;
         }
+      }
+      // 3. 最后使用传入的默认值
+      else if (defaultMaxMicSlots) {
+        maxSlots = defaultMaxMicSlots;
+        console.log('🎯 使用传入的默认麦位数量:', maxSlots);
       }
     } catch (error) {
       console.error('❌ 解析房间元数据失败:', error);
     }
     
-    // 如果没有获取到,使用传入的默认值
-    return defaultMaxMicSlots;
-  }, [roomInfo?.metadata, defaultMaxMicSlots]);
+    console.log('🎯 最终使用的麦位数量:', maxSlots);
+    return maxSlots;
+  }, [roomInfo?.metadata, roomDetails, defaultMaxMicSlots]);
   
   // 🔥 修改：基于麦位列表统计，而不是真实麦克风状态
   const micListCount = React.useMemo(() => 

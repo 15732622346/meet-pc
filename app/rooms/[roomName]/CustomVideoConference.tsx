@@ -93,7 +93,7 @@ export function CustomVideoConference({
   const [autoScreenShareAttempted, setAutoScreenShareAttempted] = React.useState(false);
   const [currentMicStatus, setCurrentMicStatus] = React.useState<'disabled' | 'enabled' | 'requesting' | 'muted_by_host'>('disabled');
   const [showChatMenu, setShowChatMenu] = React.useState(false);
-  const [chatGlobalMute, setChatGlobalMute] = React.useState(false);
+  const [chatGlobalMute, setChatGlobalMute] = React.useState(true); // 修改为true，默认不能发言
   const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const [hasHost, setHasHost] = React.useState(false);
   // 添加isUserDisabled状态来追踪用户禁用状态
@@ -2210,7 +2210,7 @@ export function CustomVideoConference({
         {/* 房间音频渲染器 */}
         <RoomAudioRenderer />
 
-        {/* 麦克风状态调试按钮 - 固定在右下角 */}
+        {/* 麦克风状态调试按钮 - 固定在右下角 - 已注释掉
         <button
           onClick={() => setWidgetState(prev => ({ ...prev, showDebugPanel: !prev.showDebugPanel }))}
           style={{
@@ -2236,6 +2236,7 @@ export function CustomVideoConference({
         >
           D
         </button>
+        */}
       </div>
     </LayoutContextProvider>
   );
