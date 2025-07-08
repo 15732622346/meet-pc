@@ -1,24 +1,47 @@
 'use client';
 
 import React from 'react';
-import { useRoomContext, useParticipants, useLocalParticipant } from '@livekit/components-react';
+import { useRoomContext, useParticipants, useLocalParticipant, useRoomInfo } from '@livekit/components-react';
 import { shouldShowInMicList } from '@/lib/token-utils';
 
 interface SimpleMicManagementProps {
   userRole?: number;
   userName?: string;
-  maxMicSlots?: number;
+  maxMicSlots?: number; // 保留作为备选值
 }
 
 export function SimpleMicManagement({ 
   userRole = 1, 
   userName, 
-  maxMicSlots = 6 
+  maxMicSlots: defaultMaxMicSlots = 6 
 }: SimpleMicManagementProps) {
   const room = useRoomContext();
+  const roomInfo = useRoomInfo();
   const participants = useParticipants();
   const localParticipantState = useLocalParticipant();
   const localParticipant = localParticipantState.localParticipant;
+  
+  // 从LiveKit服务器房间元数据获取maxMicSlots
+  const maxMicSlots = React.useMemo(() => {
+    let maxSlots;
+    
+    try {
+      // 优先从房间元数据获取
+      if (roomInfo?.metadata) {
+        const metadata = JSON.parse(roomInfo.metadata);
+        if (metadata && typeof metadata.maxMicSlots === 'number') {
+          maxSlots = metadata.maxMicSlots;
+          console.log('🎯 从LiveKit房间元数据获取麦位数量:', maxSlots);
+          return maxSlots;
+        }
+      }
+    } catch (error) {
+      console.error('❌ 解析房间元数据失败:', error);
+    }
+    
+    // 如果没有获取到,使用传入的默认值
+    return defaultMaxMicSlots;
+  }, [roomInfo?.metadata, defaultMaxMicSlots]);
   
   // 🔥 修改：基于麦位列表统计，而不是真实麦克风状态
   const micListCount = React.useMemo(() => 

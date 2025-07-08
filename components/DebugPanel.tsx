@@ -15,8 +15,8 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [kickLogs, setKickLogs] = useState<string[]>([]);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [maxMicSlots, setMaxMicSlots] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const prevRole = useRef<any>(null);
   const prevMicStatus = useRef<any>(null);
@@ -58,179 +58,73 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     alert(debugInfo);
   };
 
-  // 添加踢下麦日志 - 使用"踢踢踢"前缀
-  const addKickLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setKickLogs(prev => [`踢踢踢 [${timestamp}] ${message}`, ...prev].slice(0, 30));
-  };
+  // 监听房间元数据变化
+  useEffect(() => {
+    if (!room) return;
+    
+    // 初始加载房间元数据
+    try {
+      const metadata = room.metadata ? JSON.parse(room.metadata) : {};
+      setMaxMicSlots(metadata.maxMicSlots || null);
+    } catch (e) {
+      console.error('解析房间元数据失败:', e);
+    }
+    
+    // 监听元数据变化
+    const handleRoomUpdate = () => {
+      try {
+        const metadata = room.metadata ? JSON.parse(room.metadata) : {};
+        setMaxMicSlots(metadata.maxMicSlots || null);
+      } catch (e) {
+        console.error('解析房间元数据失败:', e);
+      }
+    };
+    
+    room.on('roomMetadataChanged', handleRoomUpdate);
+    
+    return () => {
+      room.off('roomMetadataChanged', handleRoomUpdate);
+    };
+  }, [room]);
 
   // 🎯 增强：监听所有相关的状态变化
   useEffect(() => {
     if (!localParticipant) {
-      addKickLog(`❌ localParticipant 不存在`);
       return;
     }
 
-    addKickLog(`✅ 开始设置事件监听器`);
     setEventListenerStatus('已设置');
 
     const handleAttributesChanged = () => {
-      addKickLog(`🔥 attributesChanged 事件被触发!`);
       const attrs = localParticipant.attributes;
       
-      addKickLog(`📊 当前所有attributes: ${JSON.stringify(attrs)}`);
-      
-      // 监控用户禁用状态
-      if (attrs.isDisabledUser === 'true') {
-        addKickLog(`🚫 用户已被禁用! isDisabledUser = ${attrs.isDisabledUser}`);
-      }
-      
-      // 🚨 新增：状态一致性检查
-      const checkStateConsistency = () => {
-        const { last_action, mic_status, display_status, isDisabledUser } = attrs;
-        
-        // 检查被批准上麦但没有实际上麦的情况
-        if (last_action === 'approved' && mic_status === 'off_mic') {
-          addKickLog(`🚨🚨🚨 发现状态不一致问题！`);
-          addKickLog(`  ├─ 问题描述: 用户被批准上麦但麦克风状态仍是off_mic`);
-          addKickLog(`  ├─ last_action: "${last_action}" (应该是approved)`);
-          addKickLog(`  ├─ mic_status: "${mic_status}" (应该是on_mic)`);
-          addKickLog(`  ├─ display_status: "${display_status}" (应该是visible)`);
-          addKickLog(`  └─ 🔧 这可能是批准操作没有完全执行成功！`);
-        }
-        
-        // 检查被踢下麦但状态不正确的情况
-        if (last_action === 'kicked' && mic_status !== 'off_mic') {
-          addKickLog(`🚨🚨🚨 发现踢下麦状态不一致！`);
-          addKickLog(`  ├─ last_action: "${last_action}" (是kicked)`);
-          addKickLog(`  ├─ mic_status: "${mic_status}" (应该是off_mic)`);
-          addKickLog(`  └─ 🔧 踢下麦操作可能没有完全执行！`);
-        }
-        
-        // 检查正常状态
-        if (last_action === 'approved' && mic_status === 'on_mic') {
-          addKickLog(`✅ 状态一致: 用户正确上麦`);
-        }
-        
-        if (last_action === 'kicked' && mic_status === 'off_mic') {
-          addKickLog(`✅ 状态一致: 用户正确下麦`);
-        }
-      };
-      
-      // 执行状态一致性检查
-      checkStateConsistency();
-      
-      // 🔥 重点关注：被踢下麦的操作
-      if (attrs.last_action === 'kicked') {
-        addKickLog(`🚨 检测到被踢下麦操作!`);
-        addKickLog(`  ├─ mic_status: ${attrs.mic_status}`);
-        addKickLog(`  ├─ display_status: ${attrs.display_status}`);
-        addKickLog(`  ├─ role: "${attrs.role}" (类型: ${typeof attrs.role})`);
-        addKickLog(`  ├─ operator_id: ${attrs.operator_id}`);
-        addKickLog(`  └─ kick_time: ${attrs.kick_time}`);
-        
-        // 检查role是否丢失
-        if (attrs.role === undefined) {
-          addKickLog(`🚨 严重问题: role字段丢失!`);
-        } else if (attrs.role === '0') {
-          addKickLog(`🚨 严重问题: role被设为游客(0)!`);
-        } else {
-          addKickLog(`✅ role字段保持正常: "${attrs.role}"`);
-        }
-      }
-      
-      // 🔍 监听role字段的任何变化
-      if (prevRole.current !== null && prevRole.current !== attrs.role) {
-        addKickLog(`🔄 Role字段变化: "${prevRole.current}" → "${attrs.role}"`);
-      }
+      // 更新当前状态引用
       prevRole.current = attrs.role;
-      
-      // 🔍 监听麦位状态变化
-      if (prevMicStatus.current !== null && prevMicStatus.current !== attrs.mic_status) {
-        addKickLog(`🎤 麦位状态变化: "${prevMicStatus.current}" → "${attrs.mic_status}"`);
-      }
       prevMicStatus.current = attrs.mic_status;
-
-      // 🔍 监听显示状态变化
-      if (prevDisplayStatus.current !== null && prevDisplayStatus.current !== attrs.display_status) {
-        addKickLog(`👁️ 显示状态变化: "${prevDisplayStatus.current}" → "${attrs.display_status}"`);
-      }
       prevDisplayStatus.current = attrs.display_status;
-
-      // 🔍 监听最后操作变化
-      if (prevLastAction.current !== null && prevLastAction.current !== attrs.last_action) {
-        addKickLog(`⚡ 最后操作变化: "${prevLastAction.current}" → "${attrs.last_action}"`);
-      }
       prevLastAction.current = attrs.last_action;
     };
 
-    // 🎯 增强：添加多种事件监听
     const handleParticipantMetadataChanged = () => {
-      addKickLog(`📝 participantMetadataChanged 事件触发`);
+      // 参与者元数据变化处理
     };
 
     // 添加所有事件监听器
     localParticipant.on('attributesChanged', handleAttributesChanged);
     localParticipant.on('participantMetadataChanged', handleParticipantMetadataChanged);
     
-    // 初始化时记录当前状态
+    // 初始化状态引用
     const attrs = localParticipant.attributes;
-    addKickLog(`🔍 初始状态: role="${attrs.role}", mic_status="${attrs.mic_status}"`);
-    addKickLog(`🔍 初始完整attributes: ${JSON.stringify(attrs)}`);
-    
-    // 🚨 初始化时也进行状态一致性检查
-    const { last_action, mic_status, display_status } = attrs;
-    if (last_action === 'approved' && mic_status === 'off_mic') {
-      addKickLog(`🚨🚨🚨 初始状态检查: 发现状态不一致！`);
-      addKickLog(`  ├─ 用户被批准上麦但麦克风状态是off_mic`);
-      addKickLog(`  ├─ 这可能是批准操作没有完全执行成功的问题`);
-      addKickLog(`  └─ 建议: 主持人重新批准一次或用户重新申请`);
-    }
-    
-    // 设置初始值
     prevRole.current = attrs.role;
     prevMicStatus.current = attrs.mic_status;
     prevDisplayStatus.current = attrs.display_status;
     prevLastAction.current = attrs.last_action;
     
     return () => {
-      addKickLog(`🧹 清理事件监听器`);
       localParticipant.off('attributesChanged', handleAttributesChanged);
       localParticipant.off('participantMetadataChanged', handleParticipantMetadataChanged);
       setEventListenerStatus('已清理');
     };
-  }, [localParticipant]);
-
-  // 🎯 新增：定时检查状态变化（备用方案）
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!localParticipant) return;
-      
-      const attrs = localParticipant.attributes;
-      
-      // 检查是否有变化但事件未触发
-      if (attrs.role !== prevRole.current) {
-        addKickLog(`⏰ 定时检查发现Role变化: "${prevRole.current}" → "${attrs.role}" (事件未触发)`);
-        prevRole.current = attrs.role;
-      }
-      
-      if (attrs.mic_status !== prevMicStatus.current) {
-        addKickLog(`⏰ 定时检查发现麦位状态变化: "${prevMicStatus.current}" → "${attrs.mic_status}" (事件未触发)`);
-        prevMicStatus.current = attrs.mic_status;
-      }
-
-      if (attrs.display_status !== prevDisplayStatus.current) {
-        addKickLog(`⏰ 定时检查发现显示状态变化: "${prevDisplayStatus.current}" → "${attrs.display_status}" (事件未触发)`);
-        prevDisplayStatus.current = attrs.display_status;
-      }
-
-      if (attrs.last_action !== prevLastAction.current) {
-        addKickLog(`⏰ 定时检查发现最后操作变化: "${prevLastAction.current}" → "${attrs.last_action}" (事件未触发)`);
-        prevLastAction.current = attrs.last_action;
-      }
-    }, 2000); // 每2秒检查一次
-
-    return () => clearInterval(interval);
   }, [localParticipant]);
 
   // 拖拽处理
@@ -335,71 +229,10 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
             <p style={{ margin: '2px 0' }}>⚙️ 事件监听状态: {eventListenerStatus}</p>
           </div>
           
-          <h4 style={{ margin: '4px 0', color: '#4a9eff' }}>📝 踢下麦事件日志</h4>
-          <div style={{ 
-            background: '#222', 
-            padding: '8px', 
-            borderRadius: '4px', 
-            marginBottom: '8px',
-            maxHeight: '300px',
-            overflowY: 'auto'
-          }}>
-            {kickLogs.map((log, index) => (
-              <div key={index} style={{ 
-                margin: '4px 0',
-                borderBottom: index < kickLogs.length - 1 ? '1px solid #333' : 'none',
-                paddingBottom: '4px',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}>
-                {log}
-              </div>
-            ))}
-          </div>
-          
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              onClick={() => addKickLog('🔄 手动添加测试日志')}
-              style={{
-                background: '#4a9eff',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                color: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              测试日志
-            </button>
-            <button 
-              onClick={() => {
-                const attrs = localParticipant?.attributes || {};
-                addKickLog(`📊 手动检查attributes: ${JSON.stringify(attrs)}`);
-              }}
-              style={{
-                background: '#4a9eff',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                color: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              检查属性
-            </button>
-            <button 
-              onClick={() => setKickLogs([])}
-              style={{
-                background: '#ff4a4a',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                color: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              清空日志
-            </button>
+          <h4 style={{ margin: '4px 0', color: '#4a9eff' }}>🏠 房间信息</h4>
+          <div style={{ background: '#222', padding: '8px', borderRadius: '4px', marginBottom: '8px' }}>
+            <p style={{ margin: '2px 0' }}>🔢 最大麦位数: <strong style={{ color: '#ffcc00' }}>{maxMicSlots !== null ? maxMicSlots : '未设置'}</strong></p>
+            <p style={{ margin: '2px 0' }}>🆔 房间名: {room?.name}</p>
           </div>
 
           {/* 选择参与者 */}
