@@ -38,6 +38,7 @@ import { FloatingWrapper } from '../../../components/FloatingParticipantTile';
 import { DebugPanel } from '../../../components/DebugPanel';
 import { AudioShareHelper } from '../../../components/AudioShareHelper';
 import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideoTile';
+import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { API_CONFIG } from '@/lib/config';
 import { shouldShowInMicList, isRequestingMic, isOnMic, isMuted, canSpeak, isHostOrAdmin, getMicStatusText, getRoleText, parseParticipantAttributes, isCameraEnabled } from '../../../lib/token-utils';
 
@@ -1721,6 +1722,7 @@ export function CustomVideoConference({
   return (
     <LayoutContextProvider value={layoutContext}>
       <div className="lk-video-conference">
+        <HideLiveKitCounters />
         <div className="lk-video-conference-inner">
           <div className="main-content-area">
             <div className="video-and-sidebar" style={{ display: 'flex', height: '100vh' }}>

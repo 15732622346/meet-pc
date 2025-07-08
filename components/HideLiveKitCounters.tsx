@@ -17,6 +17,8 @@ export function HideLiveKitCounters() {
           handlePureNumberNodes();
           // 特别处理页面右上角的数字
           handleTopRightNumbers();
+          // 特别处理视频会议容器内的纯数字
+          handleVideoConferenceNumbers();
         });
       });
 
@@ -31,13 +33,15 @@ export function HideLiveKitCounters() {
       handleCounterElements();
       handlePureNumberNodes();
       handleTopRightNumbers();
+      handleVideoConferenceNumbers();
 
-      // 每500ms强制检查一次（确保动态添加的元素也被处理）
+      // 每300ms强制检查一次（确保动态添加的元素也被处理）
       const intervalId = setInterval(() => {
         handleCounterElements();
         handlePureNumberNodes();
         handleTopRightNumbers();
-      }, 500);
+        handleVideoConferenceNumbers();
+      }, 300);
 
       // 清理函数
       return () => {
@@ -136,7 +140,7 @@ export function HideLiveKitCounters() {
             const rect = element.getBoundingClientRect();
             
             // 检查是否在页面右上角区域
-            if (rect.top < 120 && rect.right > window.innerWidth - 100) {
+            if (rect.top < 120 && rect.right > window.innerWidth - 150) {
               // 如果是HTMLElement，可以设置样式
               if (element instanceof HTMLElement) {
                 element.style.display = 'none';
@@ -167,6 +171,73 @@ export function HideLiveKitCounters() {
       const headerElements = document.querySelectorAll('header, nav, .header, .navbar, .top-bar');
       headerElements.forEach(header => {
         processTextNodesRecursively(header);
+      });
+    };
+    
+    // 特别处理视频会议容器内的纯数字文本节点
+    const handleVideoConferenceNumbers = () => {
+      // 1. 找到所有视频会议容器
+      const videoConferenceContainers = document.querySelectorAll('.lk-video-conference, .lk-video-conference-inner');
+      
+      // 2. 处理每个容器
+      videoConferenceContainers.forEach(container => {
+        // 获取容器的所有子节点（包括文本节点）
+        const childNodes = container.childNodes;
+        
+        // 3. 直接检查容器的子节点
+        childNodes.forEach(node => {
+          // 如果是文本节点，且内容是纯数字
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent?.trim();
+            if (text && /^\d+$/.test(text)) {
+              // 直接清空内容
+              console.log('找到并清除视频会议容器中的纯数字:', text);
+              node.textContent = '';
+            }
+          }
+        });
+        
+        // 4. 递归处理容器中的所有元素
+        const allElements = container.querySelectorAll('*');
+        allElements.forEach(element => {
+          const childNodes = element.childNodes;
+          childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const text = node.textContent?.trim();
+              if (text && /^\d+$/.test(text)) {
+                console.log('找到并清除视频会议容器内部元素中的纯数字:', text);
+                node.textContent = '';
+              }
+            }
+          });
+        });
+        
+        // 5. 使用特定的遍历方式查找纯文本节点
+        const walker = document.createTreeWalker(
+          container,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: function(node: Node) {
+              // 只接受纯数字的文本节点
+              return /^\s*\d+\s*$/.test(node.textContent || '') 
+                ? NodeFilter.FILTER_ACCEPT 
+                : NodeFilter.FILTER_SKIP;
+            }
+          } as any
+        );
+        
+        // 收集所有匹配的节点
+        const textNodes: Text[] = [];
+        let textNode: Text | null;
+        while (textNode = walker.nextNode() as Text) {
+          textNodes.push(textNode);
+        }
+        
+        // 清空所有匹配的节点
+        textNodes.forEach(node => {
+          console.log('使用TreeWalker找到并清除纯数字:', node.textContent);
+          node.textContent = '';
+        });
       });
     };
     
