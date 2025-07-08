@@ -58,12 +58,12 @@ const useParticipantState = (roomDetails?: { maxMicSlots: number } | null) => {
     
     // 🎯 麦位统计基于所有参与者状态
     const micStats = React.useMemo(() => {
-      // 🔧 修复：麦位列表中的人数应该是真正上麦的用户数量
+      // 🔧 修改：麦位列表中的人数应该是所有在列表中可见的用户数量，不限于已上麦的用户
       const micListCount = participants.filter(p => 
-        p.attributes?.mic_status === 'on_mic'
+        shouldShowInMicList(p.attributes || {})
       ).length;
       
-      // 已上麦的用户数量（与micListCount保持一致）
+      // 已上麦的用户数量（仅统计真正上麦的用户）
       const onMicCount = participants.filter(p => 
         p.attributes?.mic_status === 'on_mic'
       ).length;

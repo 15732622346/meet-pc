@@ -132,20 +132,20 @@ export function SimpleMicManagement({
         {/* 申请上麦按钮 */}
         {!isHost && (
           <button 
-            className={`request-btn ${micUsers.length >= maxMicSlots ? 'disabled' : ''}`}
+            className={`request-btn ${micListCount >= maxMicSlots ? 'disabled' : ''}`}
             onClick={requestMic}
-            disabled={micUsers.length >= maxMicSlots}
+            disabled={micListCount >= maxMicSlots}
           >
-            {micUsers.length >= maxMicSlots 
-              ? `麦位已满 (${micUsers.length}/${maxMicSlots})`
-              : `申请上麦 (${micUsers.length}/${maxMicSlots})`
+            {micListCount >= maxMicSlots 
+              ? `麦位已满 (${micListCount}/${maxMicSlots})`
+              : `申请上麦 (${micListCount}/${maxMicSlots})`
             }
           </button>
         )}
         
         {/* 麦位列表 */}
         <div className="mic-list">
-          <h4>上麦用户 ({micUsers.length}/{maxMicSlots})</h4>
+          <h4>上麦用户 ({micUsers.length}/{maxMicSlots}) - 麦位总数 ({micListCount}/{maxMicSlots})</h4>
           {micUsers.map(participant => (
             <div key={participant.identity} className="mic-user">
               <span>{participant.name || participant.identity}</span>
