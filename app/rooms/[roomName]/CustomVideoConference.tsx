@@ -29,7 +29,7 @@ import {
 import { Track, Participant, RoomEvent, RemoteParticipant, DataPacket_Kind, AudioPresets } from 'livekit-client';
 import type { MessageFormatter, WidgetState as BaseWidgetState } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import { MicRequestButton } from '../../../components/MicRequestButton';
 // import { LiveKitHostControlPanel } from '../../../components/LiveKitHostControlPanel';
@@ -105,6 +105,10 @@ export function CustomVideoConference({
   // 🔍 调试状态
   const [debugInfo, setDebugInfo] = React.useState<string>('');
 
+  // 添加消息发送时间限制状态 - 使用useRef保持引用
+  const lastSentTimeRef = React.useRef<number>(0);
+  const MESSAGE_COOLDOWN = 2000; // 两秒冷却时间（毫秒）
+
   // 🎯 新增：房间详情信息管理
   const [roomDetails, setRoomDetails] = React.useState<{
     maxMicSlots: number;
@@ -112,6 +116,17 @@ export function CustomVideoConference({
     roomState: number;
   } | null>(null);
 
+  // 游客点击处理函数 - 定义移到useEffect之前
+  const guestClickHandler = React.useCallback((e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // 使用 confirm 对话框，让用户选择是否前往注册登录
+    if (confirm(`游客必须注册为会员才能使用发送消息功能，是否前往注册登录？`)) {
+      // 用户选择"是" - 刷新页面，跳转到登录页面
+      window.location.reload();
+    }
+  }, []);
+  
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
@@ -919,9 +934,19 @@ export function CustomVideoConference({
     sendButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
     }
     
-    // 为所有用户添加发送拦截（屏蔽词检查 + 游客拦截）
+    // 移除之前的事件监听器，确保不重复添加
+    const oldForm = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
+    if (oldForm && oldForm.hasAttribute('data-message-cooldown')) {
+      // 已经设置过事件监听，避免重复添加
+      return;
+    }
+    
+    // 为所有用户添加发送拦截（屏蔽词检查 + 游客拦截 + 发送频率限制）
     const form = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
-    if (form && !chatInput.hasAttribute('data-intercept')) {
+    if (form) {
+      // 标记已添加事件监听
+      form.setAttribute('data-message-cooldown', 'true');
+      
       const originalSubmit = form.onsubmit;
       form.onsubmit = async (e) => {
         e.preventDefault(); // 先阻止默认提交
@@ -936,8 +961,27 @@ export function CustomVideoConference({
         const message = chatInput.value.trim();
         if (!message) return false;
         
+        // 添加发送频率限制 - 主持人和管理员不受限制
+        if (!isHostOrAdmin) {
+          const now = Date.now();
+          const timeSinceLastSent = now - lastSentTimeRef.current;
+          
+          console.log('消息发送检查:', {
+            now,
+            lastSent: lastSentTimeRef.current,
+            timeDiff: timeSinceLastSent,
+            withinCooldown: timeSinceLastSent < MESSAGE_COOLDOWN
+          });
+          
+          // 检查是否在冷却时间内
+          if (timeSinceLastSent < MESSAGE_COOLDOWN) {
+            const remainingTime = Math.ceil((MESSAGE_COOLDOWN - timeSinceLastSent) / 1000);
+            alert(`发言太快了，请等待${remainingTime}秒后再发送`);
+            return false;
+          }
+        }
+        
         // 主持人和管理员不受屏蔽词限制
-        const isHostOrAdmin = userRole === 2 || userRole === 3;
         if (!isHostOrAdmin) {
           // 提交前再次检查屏蔽词（双重保险）- 仅对非主持人用户
           const checkResult = await checkBlockedWords(message);
@@ -952,6 +996,10 @@ export function CustomVideoConference({
           }
         }
         
+        // 更新最后发送时间
+        lastSentTimeRef.current = Date.now();
+        console.log('更新最后发送时间:', lastSentTimeRef.current);
+        
         // 通过检查，调用原始提交处理
         if (originalSubmit) {
           return originalSubmit.call(form, e);
@@ -961,17 +1009,6 @@ export function CustomVideoConference({
       chatInput.setAttribute('data-intercept', 'true');
     }
   }, [chatGlobalMute, userRole, userToken]);
-  
-  // 游客点击处理函数
-  const guestClickHandler = React.useCallback((e: Event) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // 使用 confirm 对话框，让用户选择是否前往注册登录
-    if (confirm(`游客必须注册为会员才能使用发送消息功能，是否前往注册登录？`)) {
-      // 用户选择"是" - 刷新页面，跳转到登录页面
-      window.location.reload();
-    }
-  }, []);
 
   // 手动切换屏幕共享
   const toggleScreenShare = React.useCallback(async () => {
